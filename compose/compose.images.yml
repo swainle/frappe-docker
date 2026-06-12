@@ -1,0 +1,31 @@
+name: frappe-app-images
+
+x-frappe-build-args: &frappe-build-args
+  PYTHON_VERSION: ${PYTHON_VERSION}
+  NODE_VERSION: ${NODE_VERSION}
+  DEBIAN_BASE: ${DEBIAN_BASE}
+  FRAPPE_PATH: ${FRAPPE_PATH}
+  FRAPPE_BRANCH: ${FRAPPE_BRANCH}
+  WKHTMLTOPDF_VERSION: ${WKHTMLTOPDF_VERSION}
+  WKHTMLTOPDF_DISTRO: ${WKHTMLTOPDF_DISTRO}
+  INSTALL_CHROMIUM: ${INSTALL_CHROMIUM}
+  CACHE_BUST: ${CACHE_BUST}
+
+x-frappe-build-common: &frappe-build-common
+  context: ../frappe_docker
+  dockerfile: images/custom/Containerfile
+  args:
+    <<: *frappe-build-args
+
+services:
+  build-image:
+    image: ${IMAGE_REPOSITORY}:${IMAGE_TAG}
+    build:
+      <<: *frappe-build-common
+      secrets:
+        - source: apps_json
+          target: apps_json
+
+secrets:
+  apps_json:
+    file: ${APPS_JSON_FILE}

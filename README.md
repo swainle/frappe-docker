@@ -15,6 +15,7 @@
 |IMAGE_REPOSITORY|构建镜像名称||
 |IMAGE_TAG|构建镜像版本||
 |APPS_JSON_FILE|应用配置文件|相对compose文件|
+
 构建
 ```
 cd flori
@@ -34,4 +35,10 @@ sudo docker tag flori:wiki-v3.0.0-rc.4 ghcr.io/swainle/flori:wiki-v3.0.0-rc.4
 推送
 ```shell
  sudo docker push ghcr.io/swainle/flori:wiki-v3.0.0-rc.4
+```
+创建站点
+```
+./dc.sh bench new-site wiki.flori.lan   --mariadb-user-host-login-scope='%'   --db-root-password 123 --db-root-username root   --admin-password 123   --install-app wiki
+允许多用户
+./dc.sh bench config dns_multitenant on 
 ```

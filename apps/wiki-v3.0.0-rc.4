@@ -1,0 +1,19 @@
+# 基础构建参数
+PYTHON_VERSION=3.14.5
+NODE_VERSION=24.16.0
+DEBIAN_BASE=bookworm
+
+FRAPPE_PATH=https://github.com/frappe/frappe
+FRAPPE_BRANCH=version-16
+
+WKHTMLTOPDF_VERSION=0.12.6.1-3
+WKHTMLTOPDF_DISTRO=bookworm
+INSTALL_CHROMIUM=true
+
+# 构建参数
+IMAGE_REPOSITORY=flori
+IMAGE_TAG=wiki-v3.0.0-rc.4
+APPS_JSON_FILE=../apps/wiki-v3.0.0-rc.4.json
+
+#用于打破 bench init 缓存
+CACHE_BUST=wiki-v3.0.0-rc.4-20260613
