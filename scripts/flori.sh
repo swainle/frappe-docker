@@ -5,6 +5,10 @@ SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+source $ROOT_DIR/scripts/base.sh
+
+
+
 init(){
   # flori init [owner] :owner 可选 [master|node|register] 
   
@@ -87,67 +91,142 @@ help() {
   '
 }
 
-exec(){
-  # flori exec [command] :执行docker compose [command]
-  _permission "node"
-  NAME=$(basename $1)
-  ENV_FILE="sites/${NAME}"
-  DC=(
+_pool_run(){
+  local pool=${1:-}
+  if [[ -z "$pool" ]]; then
+    echo "缺少 pool"
+    return 1
+  fi
+  
+  local env_file="$(find . -path "*${pool}/pool.env")"
+  local DC=(
     "sudo" "docker" "compose"
-    "-p" "${NAME//./-}"
-    "--env-file" "$ENV_FILE"
+    "-p" "${pool}"
+    "--env-file" "$env_file"
     "-f" "frappe_docker/compose.yaml" 
     "-f" "frappe_docker/overrides/compose.mariadb.yaml" 
     "-f" "compose/compose.mariadb.healthcheck.yml"
     "-f" "frappe_docker/overrides/compose.redis.yaml" 
     "-f" "frappe_docker/overrides/compose.noproxy.yaml" 
+    "-f" "compose/compose.noproxy.traefik.yml" 
   )
   shift
   ${DC[@]} $@
 }
 
+
+domain(){
+  # flori domain [domain]  :操作domain 默认创建domain
+
+  _permission "node"
+
+  local domain=$1
+
+  local env_file="$(find . -path "*${domain}/domain.env")"
+  local pool=$(_get_env $env_file "POOL_NAME")
+  local default_site_name=$(_get_env $env_file "DEFAULT_SITE_NAME")
+  local domian=$(_get_env $env_file "DOMAIN")
+
+
+  _pool_run $pool exec backend bench setup add-domain "$domian" --site "$default_site_name"
+  _pool_run $pool exec backend ln -s "/home/frappe/frappe-bench/sites/$default_site_name" "/home/frappe/frappe-bench/sites/$domian"
+ 
+
+  hosts=""
+  for file in $(find -path "*${default_site_name//.dev.lan/}/*/domain.env"); do
+    value=$(_get_env $file "TRAEFIK_HOST")
+ 
+   if [ -z "$hosts" ]; then
+      hosts="$value"
+    else
+      hosts="$hosts \|\| $value"
+    fi
+  done
+  local pool_env_file="$(find . -path "*${pool}/pool.env")"
+
+  sed -i "s#^TRAEFIK_HOSTS=.*#TRAEFIK_HOSTS=${hosts}#" "$pool_env_file"
+  _pool_run $pool  restart frontend backend
+}
+
 site() {
-  # flori site [site] :使用容器创建site
+  # flori site [site] :操作site 默认创建site
   
   _permission "node"
   
-  NAME=$(basename $1)
-  ENV_FILE="sites/${NAME}"
-  . $ENV_FILE
+  local site=$1
+  local env_file="$(find . -path "*${site}/site.env")"
+  source "$env_file"
+  local pool=$POOL_NAME
 
-  exec $1 up -d
-  exec $1 exec backend bench new-site "$SITE_NAME" \
+  _pool_run $pool exec backend bench new-site "$DEFAULT_SITE_NAME" \
     --mariadb-user-host-login-scope='%' \
     --db-root-username "$DB_ROOT_USERNAME" \
     --db-root-password "$DB_ROOT_PASSWORD" \
     --admin-password "$ADMIN_PASSWORD" \
     --install-app "$INSTALL_APP"
-  exec $1 exec backend bench use "$SITE_NAME"
-  exec $1 exec backend bench config dns_multitenant on
-  exec $1 restart 
+  _pool_run $pool exec backend bench use "$DEFAULT_SITE_NAME"
+  _pool_run $pool exec backend bench config dns_multitenant on
+  _pool_run $pool restart 
+}
+
+
+
+pool() {
+  # flori pool [pool] :操作pool
+  
+  _permission "node"
+  _pool_run $@
+  
 }
 
 build() {
-  # flori build [app] :构建 app 镜像
-  
+  # flori build [app] [branch] :构建 app 镜像 
   _permission "node"
-  
+  local app=${1:-}
+  local branch=${2:-}
+
+  if [[ -z "$app" ||  -z "$branch" ]]; then
+    echo "缺少 app branch"
+    return 1
+  fi
+
+  local env_file="$(find . -path "*${app}/${branch}/app.env")"
   sudo docker compose \
-    --env-file "$1" \
+    --env-file "$env_file" \
     -f compose/compose.images.yml \
     build build-image
 }
 
-_permission(){
-  if [ ! -f "$ROOT_DIR/owner.txt" ];then
-    echo "$ROOT_DIR/owner.txt 文件未创建"
-    exit 1
+gate(){
+  # flori gate :初始化traefik
+  _permission "node"
+  sudo docker network inspect traefik-public 2>/dev/null 1>/dev/null
+  if [ $? -ne 0 ];then
+    sudo docker network create traefik-public 
   fi
-  OWNER="$(awk 'NF { print; exit }' $ROOT_DIR/owner.txt)"
-  if  [[ "$OWNER" != *"$1"* ]]; then
-    echo "$1 没权限使用"
-    exit 1
-  fi
+  
+  sudo docker compose --env-file "env/traefik.env" \
+    -f "compose/compose.traefik.yml" $@
+}
+
+rand() {
+  # flori rand [n] :产生随机字符串 
+  tr -dc '0-9a-z' < /dev/urandom | head -c $1
+}
+
+create() {
+  # flori create  :创建配置文件 [app] [branch] [pool] [site] [domain]
+
+  local app="${1:-}"
+  local branch="${2:-}"
+  local pool="${3:-}"
+  local site="${4:-}"
+  local domain="${5:-}"
+
+  _create_branch $app $branch
+  _create_pool $app $branch $pool
+  _create_site $app $branch $pool $site
+  _create_domain $app $branch $pool $site $domain
 }
 
 test(){

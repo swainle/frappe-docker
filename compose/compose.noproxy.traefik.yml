@@ -1,0 +1,18 @@
+services:
+  frontend:
+    networks:
+      - default
+      - traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+
+      - traefik.http.routers.frappe-a.rule=${TRAEFIK_HOSTS}
+      - traefik.http.routers.frappe-a.entrypoints=websecure
+      - traefik.http.routers.frappe-a.tls=true
+      - traefik.http.routers.frappe-a.tls.certresolver=le
+      - traefik.http.services.frappe-a.loadbalancer.server.port=${HTTP_PUBLISH_PORT}
+
+networks:
+  traefik-public:
+    external: true
