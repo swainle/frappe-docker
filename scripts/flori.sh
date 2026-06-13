@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-dock(){
+init(){
+  sudo ln -s $(pwd)/scripts/flori.sh /usr/local/bin/flori
+  git submodule update --init --recursive
+}
+
+exec(){
+  # 
   NAME=$(basename $1)
   ENV_FILE="sites/${NAME}"
   DC=(
@@ -25,16 +31,16 @@ site() {
   ENV_FILE="sites/${NAME}"
   . $ENV_FILE
 
-  dock $1 up -d
-  dock $1 exec backend bench new-site "$SITE_NAME" \
+  exec $1 up -d
+  exec $1 exec backend bench new-site "$SITE_NAME" \
     --mariadb-user-host-login-scope='%' \
     --db-root-username "$DB_ROOT_USERNAME" \
     --db-root-password "$DB_ROOT_PASSWORD" \
     --admin-password "$ADMIN_PASSWORD" \
     --install-app "$INSTALL_APP"
-  dock $1 exec backend bench use "$SITE_NAME"
-  dock $1 exec backend bench config dns_multitenant on
-  dock $1 restart 
+  exec $1 exec backend bench use "$SITE_NAME"
+  exec $1 exec backend bench config dns_multitenant on
+  exec $1 restart 
 }
 
 build() {
