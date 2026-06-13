@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 init(){
-  # flori init :初始化程序 安装:子模块 可执行程序
+  # flori init [owner] :owner 可选 [master|node|register] 
+  
   [ -f "/usr/local/bin/flori" ] && sudo rm /usr/local/bin/flori
   sudo ln -s $(pwd)/scripts/flori.sh /usr/local/bin/flori
   git submodule update --init --recursive
+  echo "$1" > $ROOT_DIR/owner.txt
 }
 
 help() {
   # flori help :帮助列表
-
-  local show_all=0
-  [[ "${1:-}" == "-a" || "${1:-}" == "--all" ]] && show_all=1
 
   local src="${BASH_SOURCE[0]}"
   local funcs
@@ -25,7 +25,7 @@ help() {
   echo "Flori Docker 工具, 用于管理frappe镜像的构建, 运行, 备份, 迁移"
   echo "-----------------------------"
 
-  awk -v funcs="$funcs" -v show_all="$show_all" '
+  awk -v funcs="$funcs" '
     BEGIN {
       n = split(funcs, f, " ")
       for (i = 1; i <= n; i++) {
@@ -53,10 +53,9 @@ help() {
       cmd = parts[1]
 
       if (cmd == "") next
-      if (!show_all && cmd ~ /^_/) next
-      if (!show_all && !(cmd in exists)) next
+      if (cmd ~ /^_/) next
+      if (!(cmd in exists)) next
 
-      # 输出：命令名、出现顺序、用法、说明
       printf "%s\t%06d\t%s\t%s\n", cmd, ++seq[cmd], usage, desc
     }
   ' "$src" |
@@ -90,7 +89,7 @@ help() {
 
 exec(){
   # flori exec [command] :执行docker compose [command]
-
+  _permission "node"
   NAME=$(basename $1)
   ENV_FILE="sites/${NAME}"
   DC=(
@@ -109,6 +108,9 @@ exec(){
 
 site() {
   # flori site [site] :使用容器创建site
+  
+  _permission "node"
+  
   NAME=$(basename $1)
   ENV_FILE="sites/${NAME}"
   . $ENV_FILE
@@ -127,10 +129,30 @@ site() {
 
 build() {
   # flori build [app] :构建 app 镜像
+  
+  _permission "node"
+  
   sudo docker compose \
     --env-file "$1" \
     -f compose/compose.images.yml \
     build build-image
+}
+
+_permission(){
+  if [ ! -f "$ROOT_DIR/owner.txt" ];then
+    echo "$ROOT_DIR/owner.txt 文件未创建"
+    exit 1
+  fi
+  OWNER="$(awk 'NF { print; exit }' $ROOT_DIR/owner.txt)"
+  if  [[ "$OWNER" != *"$1"* ]]; then
+    echo "$1 没权限使用"
+    exit 1
+  fi
+}
+
+test(){
+  # flori test :测试
+  echo "test"
 }
 
 "$@"
